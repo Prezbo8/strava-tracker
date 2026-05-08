@@ -577,53 +577,114 @@ function renderOverview() {
 
   // ── Pace chart: May 2025 → today ──
   const may2025 = new Date('2025-05-01');
-  const paceRuns = runs
-    .filter(a => a.distance > 1000 && new Date(a.start_date) >= may2025)
-    .sort((a,b) => new Date(a.start_date) - new Date(b.start_date));
+const paceRuns = runs
+  .filter(a => a.distance > 1000 && new Date(a.start_date) >= may2025)
+  .sort((a,b) => new Date(a.start_date) - new Date(b.start_date));
 
-  if (paceChart) paceChart.destroy();
-  if (paceYAxis) paceYAxis.destroy();
+if (paceChart) paceChart.destroy();
+if (paceYAxis) paceYAxis.destroy();
 
-  const paceWrap = document.getElementById('pace-wrap');
-  paceWrap.style.width = Math.max(400, paceRuns.length * 14) + 'px';
+const paceWrap = document.getElementById('pace-wrap');
+paceWrap.style.width = Math.max(600, paceRuns.length * 42) + 'px';   // Wider for all runs
 
-  const paceData = paceRuns.map(a => parseFloat((a.moving_time / (a.distance / 1609.344) / 60).toFixed(2)));
-  const pMin = paceData.length ? Math.max(0, Math.floor(Math.min(...paceData)) - 1) : 6;
-  const pMax = paceData.length ? Math.ceil(Math.max(...paceData)) + 1 : 16;
-  const paceTick = v => { const m = Math.floor(v); const s = Math.round((v-m)*60); return `${m}:${s.toString().padStart(2,'0')}`; };
+const paceData = paceRuns.map(a => {
+  const pace = a.moving_time / (a.distance / 1609.344) / 60;
+  return parseFloat(pace.toFixed(2));
+});
 
-  const pyc = document.getElementById('chart-pace-yaxis');
-  pyc.width = 56; pyc.height = pyc.parentElement.offsetHeight || 200;
+const pMin = paceData.length ? Math.max(4, Math.floor(Math.min(...paceData)) - 1) : 6;
+const pMax = paceData.length ? Math.ceil(Math.max(...paceData)) + 1 : 16;
 
-  paceYAxis = new Chart(pyc, {
-    type: 'line',
-    data: { labels: paceRuns.map(a => a.start_date), datasets: [{ data: paceData, backgroundColor:'transparent', borderColor:'transparent', pointRadius:0 }] },
-    options: {
-      responsive: false, maintainAspectRatio: false, animation: false,
-      plugins: { legend:{display:false}, tooltip:{enabled:false} },
-      scales: {
-        x: { display: false },
-        y: { min: pMin, max: pMax, reverse:true, grid:{color:gridColor}, ticks:{color:labelColor, font:{size:11}, callback:paceTick, maxTicksLimit:6} }
-      },
-      layout: { padding: { top: PAD_TOP, bottom: PAD_BOT, left: 0, right: 0 } }
-    }
-  });
+const paceTick = v => {
+  const m = Math.floor(v);
+  const s = Math.round((v - m) * 60);
+  return `${m}:${s.toString().padStart(2,'0')}`;
+};
 
-  paceChart = new Chart(document.getElementById('chart-pace'), {
-    type: 'line',
-    data: {
-      labels: paceRuns.map(a => fmtDate(a.start_date)),
-      datasets: [{ label:'min/mi', data: paceData, borderColor:'#FC4C02', backgroundColor:'rgba(252,76,2,0.08)', fill:true, tension:0.3, pointRadius:2, pointBackgroundColor:'#FC4C02' }]
+const pyc = document.getElementById('chart-pace-yaxis');
+pyc.width = 56;
+pyc.height = pyc.parentElement.offsetHeight || 200;
+
+// Left y-axis (with pace labels)
+paceYAxis = new Chart(pyc, {
+  type: 'line',
+  data: { 
+    labels: paceRuns.map(a => a.start_date), 
+    datasets: [{ 
+      data: paceData, 
+      backgroundColor: 'transparent', 
+      borderColor: 'transparent', 
+      pointRadius: 0 
+    }] 
+  },
+  options: {
+    responsive: false, 
+    maintainAspectRatio: false, 
+    animation: false,
+    plugins: { legend:{display:false}, tooltip:{enabled:false} },
+    scales: {
+      x: { display: false },
+      y: { 
+        min: pMin, 
+        max: pMax, 
+        reverse: true, 
+        grid: { color: gridColor },
+        ticks: { 
+          color: labelColor, 
+          font: { size: 11 },
+          callback: paceTick,
+          maxTicksLimit: 8,
+          stepSize: 1
+        } 
+      }
     },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend:{display:false}, tooltip:{callbacks:{label: ctx => `Pace: ${paceTick(ctx.parsed.y)}`}} },
-      scales: {
-        x: { grid:{color:gridColor}, ticks:{color:labelColor, font:{size:10}, maxRotation:45, autoSkip:true, maxTicksLimit:20} },
-        y: { display:false, min: pMin, max: pMax, reverse:true }
+    layout: { padding: { top: PAD_TOP, bottom: PAD_BOT, left: 0, right: 0 } }
+  }
+});
+
+// Main pace chart
+paceChart = new Chart(document.getElementById('chart-pace'), {
+  type: 'line',
+  data: {
+    labels: paceRuns.map(a => fmtDate(a.start_date)),
+    datasets: [{ 
+      label: 'min/mi', 
+      data: paceData, 
+      borderColor: '#FC4C02', 
+      backgroundColor: 'rgba(252,76,2,0.08)', 
+      fill: true, 
+      tension: 0.2, 
+      pointRadius: 3, 
+      pointBackgroundColor: '#FC4C02',
+      pointHoverRadius: 5
+    }]
+  },
+  options: {
+    responsive: true, 
+    maintainAspectRatio: false,
+    plugins: { 
+      legend: { display: false }, 
+      tooltip: { 
+        callbacks: { 
+          label: ctx => `Pace: ${paceTick(ctx.parsed.y)}` 
+        } 
+      } 
+    },
+    scales: {
+      x: { 
+        grid: { color: gridColor },
+        ticks: { 
+          color: labelColor, 
+          font: { size: 10 }, 
+          maxRotation: 45, 
+          autoSkip: false,           // Show ALL dates
+          maxTicksLimit: paceRuns.length   // Force all labels
+        } 
       },
-      layout: { padding: { top: PAD_TOP, bottom: 0, left: 0, right: 4 } }
-    }
+      y: { display: false, min: pMin, max: pMax, reverse: true }
+    },
+    layout: { padding: { top: PAD_TOP, bottom: 0, left: 0, right: 12 } }
+  }
   });
 }
 
