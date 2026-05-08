@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Strava Run Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root {
+    --orange: #FC4C02;
+    --bg: #f7f7f5;
+    --card: #ffffff;
+    --border: rgba(0,0,0,0.1);
+    --text: #1a1a1a;
+    --muted: #6b6b6b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111110;
+      --card: #1c1c1b;
+      --border: rgba(255,255,255,0.1);
+      --text: #f0ede8;
+      --muted: #999;
+    }
+  }
+  
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { 
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
+    background: var(--bg); 
+    color: var(--text); 
+    padding: 20px;
+  }
+  
+  .container { max-width: 600px; margin: 0 auto; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 30px; margin: 20px 0; }
+  .title { font-size: 24px; font-weight: 600; margin-bottom: 10px; }
+  .subtitle { font-size: 14px; color: var(--muted); margin-bottom: 20px; }
+  
+  input, select { 
+    width: 100%; 
+    padding: 12px; 
+    margin: 10px 0; 
+    border: 1px solid var(--border); 
+    border-radius: 8px; 
+    font-size: 14px;
+    background: var(--bg);
+    color: var(--text);
+  }
+  
+  button { 
+    width: 100%; 
+    padding: 14px; 
+    margin-top: 10px;
+    background: var(--orange); 
+    color: white; 
+    border: none; 
+    border-radius: 8px; 
+    font-size: 16px; 
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  button:hover { opacity: 0.9; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  
+  .error { 
+    background: #ffebee; 
+    border: 1px solid #ef5350; 
+    color: #c62828; 
+    padding: 12px; 
+    border-radius: 8px; 
+    margin: 10px 0; 
+    display: none;
+  }
+  .error.show { display: block; }
+  
+  .success { 
+    background: #e8f5e9; 
+    border: 1px solid #66bb6a; 
+    color: #2e7d32; 
+    padding: 12px; 
+    border-radius: 8px; 
+    margin: 10px 0; 
+    display: none;
+  }
+  .success.show { display: block; }
+  
+  .link { color: var(--orange); cursor: pointer; text-decoration: underline; }
+  .hidden { display: none; }
+  
+  .loader { text-align: center; padding: 40px; }
+  .spinner { 
+    width: 40px; 
+    height: 40px; 
+    border: 4px solid var(--border); 
+    border-top-color: var(--orange); 
+    border-radius: 50%; 
+    animation: spin 1s linear infinite; 
+    margin: 0 auto 20px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin: 20px 0; }
+  .stat-card { background: var(--bg); padding: 15px; border-radius: 8px; text-align: center; }
+  .stat-value { font-size: 24px; font-weight: 600; }
+  .stat-label { font-size: 12px; color: var(--muted); margin-top: 5px; }
+  
+  .chart-container { position: relative; height: 400px; margin: 20px 0; overflow-x: auto; }
+  
+  code { 
+    background: var(--bg); 
+    padding: 6px 10px; 
+    border-radius: 4px; 
+    font-family: monospace;
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <!-- AUTH VIEW -->
+  <div id="auth-view">
+    <div class="card">
+      <div class="title">🏃 Strava Run Tracker</div>
+      <div class="subtitle">Connect your Strava account to see your running stats</div>
+      
+      <div id="auth-error" class="error"></div>
+      <div id="auth-success" class="success"></div>
+      
+      <label>Client ID</label>
+      <input id="client-id" type="text" placeholder="Your Strava Client ID">
+      
+      <label>Client Secret</label>
+      <input id="client-secret" type="password" placeholder="Your Strava Client Secret">
+      
+      <button id="connect-btn" onclick="handleConnect()">Connect with Strava</button>
+      
+      <hr style="margin: 20px 0; border: none; border-top: 1px solid var(--border);">
+      
+      <div style="font-size: 12px; color: var(--muted); line-height: 1.6;">
+        <p><strong style="color: var(--text);">Setup Instructions:</strong></p>
+        <p>1. Go to <a href="https://www.strava.com/settings/api" target="_blank" style="color: var(--orange);">strava.com/settings/api</a></p>
+        <p>2. Create an API Application</p>
+        <p>3. Set <strong>Authorization Callback Domain</strong> to: <code>prezbo8.github.io</code></p>
+        <p>4. Copy your Client ID and Client Secret below</p>
+        <p>5. Click "Connect with Strava"</p>
+      </div>
+    </div>
+  </div>
+  
+  <!-- DASHBOARD VIEW -->
+  <div id="dashboard-view" class="hidden">
+    <div class="card">
+      <div class="title" id="athlete-name">Welcome</div>
+      <button onclick="handleDisconnect()" style="background: #ef5350;">Disconnect</button>
+    </div>
+    
+    <div class="card">
+      <div class="title">📊 Running Stats</div>
+      <div class="stats-grid" id="stats-grid"></div>
+    </div>
+    
+    <div class="card">
+      <div class="title">📈 Pace Over Time</div>
+      <div class="chart-container">
+        <canvas id="pace-chart"></canvas>
+      </div>
+      <label>Filter by Year:</label>
+      <select id="year-filter" onchange="updatePaceChart()">
+        <option value="all">All</option>
+        <option value="2025">2025</option>
+        <option value="2026">2026</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<script>
+// Constants
+const REDIRECT_URI = 'https://prezbo8.github.io/strava-tracker/';
+const SCOPE = 'activity:read_all';
+
+// Storage helpers
+function save(key, value) {
+  try {
+    localStorage.setItem(key, value);
+    console.log(`✓ Saved ${key}`);
+  } catch (e) {
+    console.error(`✗ Failed to save ${key}:`, e);
+  }
+}
+
+function load(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch (e) {
+    console.error(`✗ Failed to load ${key}:`, e);
+    return null;
+  }
+}
+
+// Error display
+function showError(msg) {
+  const el = document.getElementById('auth-error');
+  if (msg) {
+    el.textContent = msg;
+    el.classList.add('show');
+  } else {
+    el.classList.remove('show');
+  }
+}
+
+function showSuccess(msg) {
+  const el = document.getElementById('auth-success');
+  if (msg) {
+    el.textContent = msg;
+    el.classList.add('show');
+  } else {
+    el.classList.remove('show');
+  }
+}
+
+// Main connect function
+function handleConnect() {
+  console.log('=== CONNECT BUTTON CLICKED ===');
+  
+  const clientId = document.getElementById('client-id').value.trim();
+  const clientSecret = document.getElementById('client-secret').value.trim();
+  const btn = document.getElementById('connect-btn');
+  
+  console.log('Client ID:', clientId);
+  console.log('Client Secret:', clientSecret.substring(0, 10) + '...');
+  console.log('Redirect URI:', REDIRECT_URI);
+  
+  // Validate
+  if (!clientId || !clientSecret) {
+    showError('Please enter both Client ID and Client Secret');
+    return;
+  }
+  
+  if (!/^\d+$/.test(clientId)) {
+    showError('Client ID must be a number');
+    return;
+  }
+  
+  if (clientSecret.length < 20) {
+    showError('Client Secret seems too short');
+    return;
+  }
+  
+  // Save credentials
+  save('strava_client_id', clientId);
+  save('strava_client_secret', clientSecret);
+  
+  // Build OAuth URL
+  const authUrl = new URL('https://www.strava.com/oauth/authorize');
+  authUrl.searchParams.set('client_id', clientId);
+  authUrl.searchParams.set('redirect_uri', REDIRECT_URI);
+  authUrl.searchParams.set('response_type', 'code');
+  authUrl.searchParams.set('scope', SCOPE);
+  
+  console.log('Auth URL:', authUrl.toString());
+  
+  // Update button
+  btn.disabled = true;
+  btn.textContent = 'Redirecting to Strava...';
+  showError('');
+  
+  // Redirect
+  console.log('Redirecting to:', authUrl.toString());
+  setTimeout(() => {
+    window.location.href = authUrl.toString();
+  }, 500);
+}
+
+// Disconnect
+function handleDisconnect() {
+  const keys = ['strava_access_token', 'strava_refresh_token', 'strava_expires_at', 'strava_athlete', 'strava_client_id', 'strava_client_secret'];
+  keys.forEach(k => {
+    try {
+      localStorage.removeItem(k);
+      console.log(`✓ Cleared ${k}`);
+    } catch (e) {
+      console.error(`✗ Failed to clear ${k}:`, e);
+    }
+  });
+  location.reload();
+}
+
+// Fetch athlete data
+async function fetchAthlete() {
+  const token = load('strava_access_token');
+  if (!token) return null;
+  
+  try {
+    const res = await fetch('https://www.strava.com/api/v3/athlete', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return await res.json();
+  } catch (e) {
+    console.error('Error fetching athlete:', e);
+    return null;
+  }
+}
+
+// Fetch all activities
+async function fetchActivities() {
+  const token = load('strava_access_token');
+  if (!token) return [];
+  
+  let allActivities = [];
+  let page = 1;
+  
+  try {
+    while (true) {
+      const res = await fetch(
+        `https://www.strava.com/api/v3/athlete/activities?per_page=100&page=${page}`,
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      
+      if (!res.ok) break;
+      
+      const data = await res.json();
+      if (!Array.isArray(data) || data.length === 0) break;
+      
+      allActivities = allActivities.concat(data);
+      page++;
+    }
+  } catch (e) {
+    console.error('Error fetching activities:', e);
+  }
+  
+  return allActivities;
+}
+
+// Update dashboard
+async function launchDashboard() {
+  console.log('=== LAUNCHING DASHBOARD ===');
+  
+  // Show dashboard
+  document.getElementById('auth-view').classList.add('hidden');
+  document.getElementById('dashboard-view').classList.remove('hidden');
+  
+  // Fetch athlete
+  const athlete = await fetchAthlete();
+  if (athlete && athlete.firstname) {
+    document.getElementById('athlete-name').textContent = `Welcome, ${athlete.firstname}!`;
+  }
+  
+  // Fetch activities
+  console.log('Fetching activities...');
+  const activities = await fetchActivities();
+  console.log(`Fetched ${activities.length} activities`);
+  
+  // Filter runs
+  const runs = activities.filter(a => a.type === 'Run' && a.distance > 1000);
+  console.log(`Found ${runs.length} runs`);
+  
+  // Calculate stats
+  const totalMiles = runs.reduce((sum, r) => sum + r.distance / 1609.344, 0);
+  const totalMinutes = runs.reduce((sum, r) => sum + r.moving_time / 60, 0);
+  const avgPace = totalMinutes > 0 ? totalMinutes / totalMiles : 0;
+  
+  // Display stats
+  document.getElementById('stats-grid').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-value">${runs.length}</div>
+      <div class="stat-label">Total Runs</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">${totalMiles.toFixed(0)}</div>
+      <div class="stat-label">Total Miles</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">${avgPace.toFixed(1)}</div>
+      <div class="stat-label">Avg Pace (min/mi)</div>
+    </div>
+  `;
+  
+  // Store runs for chart
+  window.allRuns = runs;
+  
+  // Draw pace chart
+  updatePaceChart();
+}
+
+// Update pace chart
+function updatePaceChart() {
+  if (!window.allRuns) return;
+  
+  const yearFilter = document.getElementById('year-filter').value;
+  
+  let runs = window.allRuns.slice();
+  if (yearFilter !== 'all') {
+    const year = parseInt(yearFilter);
+    runs = runs.filter(r => new Date(r.start_date).getFullYear() === year);
+  }
+  
+  console.log(`Drawing chart with ${runs.length} runs`);
+  
+  // Calculate pace for each run
+  const paceData = runs.map(r => {
+    const miles = r.distance / 1609.344;
+    const hours = r.moving_time / 3600;
+    return hours > 0 ? (hours * 60 / miles) : 0;
+  });
+  
+  const labels = runs.map(r => {
+    const d = new Date(r.start_date);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  });
+  
+  // Destroy old chart
+  if (window.paceChart) window.paceChart.destroy();
+  
+  // Create new chart
+  const ctx = document.getElementById('pace-chart');
+  window.paceChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Pace (min/mi)',
+        data: paceData,
+        borderColor: '#FC4C02',
+        backgroundColor: 'rgba(252, 76, 2, 0.1)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 3,
+        pointBackgroundColor: '#FC4C02'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: {
+          reverse: true,
+          ticks: {
+            callback: v => `${Math.floor(v)}:${Math.round((v % 1) * 60).toString().padStart(2, '0')}`
+          }
+        },
+        x: {
+          ticks: {
+            autoSkip: false,
+            maxRotation: 45,
+            minRotation: 45
+          }
+        }
+      }
+    }
+  });
+}
+
+// Handle OAuth callback
+function handleOAuthCallback() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  const error = params.get('error');
+  
+  if (error) {
+    console.error('OAuth Error:', error, params.get('error_description'));
+    showError(`Strava Error: ${error} - ${params.get('error_description')}`);
+    return;
+  }
+  
+  if (!code) return;
+  
+  console.log('=== OAUTH CALLBACK ===');
+  console.log('Auth code received:', code);
+  
+  exchangeCodeForToken(code);
+}
+
+// Exchange code for token
+async function exchangeCodeForToken(code) {
+  const clientId = load('strava_client_id');
+  const clientSecret = load('strava_client_secret');
+  
+  if (!clientId || !clientSecret) {
+    showError('Client ID or Secret not found. Please enter them again.');
+    return;
+  }
+  
+  console.log('Exchanging code for token...');
+  
+  try {
+    const res = await fetch('https://www.strava.com/oauth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: clientId,
+        client_secret: clientSecret,
+        code: code,
+        grant_type: 'authorization_code'
+      })
+    });
+    
+    const data = await res.json();
+    console.log('Token response:', data);
+    
+    if (data.access_token) {
+      console.log('✓ Got access token');
+      save('strava_access_token', data.access_token);
+      save('strava_refresh_token', data.refresh_token);
+      save('strava_expires_at', data.expires_at);
+      if (data.athlete) save('strava_athlete', JSON.stringify(data.athlete));
+      
+      // Clean URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+      
+      // Launch dashboard
+      launchDashboard();
+    } else {
+      console.error('Token response error:', data);
+      showError(data.message || 'Failed to get access token');
+    }
+  } catch (e) {
+    console.error('Token exchange error:', e);
+    showError('Network error: ' + e.message);
+  }
+}
+
+// Initialize
+window.addEventListener('DOMContentLoaded', () => {
+  console.log('=== PAGE LOADED ===');
+  console.log('Redirect URI:', REDIRECT_URI);
+  
+  // Check for auth code in URL
+  handleOAuthCallback();
+  
+  // Check for existing token
+  const token = load('strava_access_token');
+  if (token) {
+    console.log('✓ Found existing token, launching dashboard');
+    launchDashboard();
+  } else {
+    console.log('No token found, showing auth form');
+  }
+});
+</script>
+
+</body>
+</html>
