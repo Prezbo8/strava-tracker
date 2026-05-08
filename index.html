@@ -240,19 +240,17 @@
       </div>
       <div class="chart-card">
         <div class="chart-title">Pace over time (min/mi)</div>
-        <div style="position:relative; display:flex; height:200px;">
-          <div style="flex-shrink:0; width:56px; position:relative; z-index:2; background:var(--card);">
-            <canvas id="chart-pace-yaxis" style="position:absolute;top:0;left:0;width:56px;height:100%;"></canvas>
-          </div>
-          <div style="flex:1; overflow-x:auto; overflow-y:hidden;">
-            <div id="pace-wrap" style="height:200px; min-width:300px; position:relative;">
-              <canvas id="chart-pace" role="img" aria-label="Pace over time chart"></canvas>
-            </div>
-          </div>
-        </div>
+        <div style="position:relative; display:flex; height:320px;">
+    <div style="flex-shrink:0; width:80px; position:relative; z-index:2; background:var(--card);">
+      <canvas id="chart-pace-yaxis" style="position:absolute;top:0;left:0;width:80px;height:100%;"></canvas>
+    </div>
+    <div style="flex:1; overflow-x:auto; overflow-y:hidden;">
+      <div id="pace-wrap" style="height:320px; min-width:700px; position:relative;">
+        <canvas id="chart-pace" role="img" aria-label="Pace over time chart"></canvas>
       </div>
     </div>
   </div>
+</div>
 
   <div class="view" id="tab-activities">
     <div class="filter-bar">
@@ -585,7 +583,7 @@ if (paceChart) paceChart.destroy();
 if (paceYAxis) paceYAxis.destroy();
 
 const paceWrap = document.getElementById('pace-wrap');
-paceWrap.style.width = Math.max(600, paceRuns.length * 42) + 'px';   // Wider for all runs
+paceWrap.style.width = Math.max(800, paceRuns.length * 42) + 'px';
 
 const paceData = paceRuns.map(a => {
   const pace = a.moving_time / (a.distance / 1609.344) / 60;
@@ -602,10 +600,10 @@ const paceTick = v => {
 };
 
 const pyc = document.getElementById('chart-pace-yaxis');
-pyc.width = 56;
-pyc.height = pyc.parentElement.offsetHeight || 200;
+pyc.width = 80;                    // Wider for better label space
+pyc.height = pyc.parentElement.offsetHeight || 320;
 
-// Left y-axis (with pace labels)
+// Left y-axis
 paceYAxis = new Chart(pyc, {
   type: 'line',
   data: { 
@@ -631,14 +629,62 @@ paceYAxis = new Chart(pyc, {
         grid: { color: gridColor },
         ticks: { 
           color: labelColor, 
-          font: { size: 11 },
+          font: { size: 13, weight: '500' },
           callback: paceTick,
-          maxTicksLimit: 8,
-          stepSize: 1
+          maxTicksLimit: 10,
+          padding: 15,
+          align: 'right'
         } 
       }
     },
-    layout: { padding: { top: PAD_TOP, bottom: PAD_BOT, left: 0, right: 0 } }
+    layout: { 
+      padding: { top: 20, bottom: 40, left: 12, right: 12 } 
+    }
+  }
+});
+
+// Main pace chart
+paceChart = new Chart(document.getElementById('chart-pace'), {
+  type: 'line',
+  data: {
+    labels: paceRuns.map(a => fmtDate(a.start_date)),
+    datasets: [{ 
+      label: 'min/mi', 
+      data: paceData, 
+      borderColor: '#FC4C02', 
+      backgroundColor: 'rgba(252,76,2,0.08)', 
+      fill: true, 
+      tension: 0.2, 
+      pointRadius: 4, 
+      pointBackgroundColor: '#FC4C02',
+      pointHoverRadius: 6
+    }]
+  },
+  options: {
+    responsive: true, 
+    maintainAspectRatio: false,
+    plugins: { 
+      legend: { display: false }, 
+      tooltip: { 
+        callbacks: { 
+          label: ctx => `Pace: ${paceTick(ctx.parsed.y)}` 
+        } 
+      } 
+    },
+    scales: {
+      x: { 
+        grid: { color: gridColor },
+        ticks: { 
+          color: labelColor, 
+          font: { size: 11 }, 
+          maxRotation: 45, 
+          autoSkip: false,
+          maxTicksLimit: paceRuns.length
+        } 
+      },
+      y: { display: false, min: pMin, max: pMax, reverse: true }
+    },
+    layout: { padding: { top: 20, bottom: 0, left: 0, right: 16 } }
   }
 });
 
