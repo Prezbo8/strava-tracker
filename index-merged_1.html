@@ -1,0 +1,1421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Strava Run Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<style>
+  :root {
+    --orange: #FC4C02;
+    --orange-light: #fff1ec;
+    --orange-dark: #c33b00;
+    --bg: #f7f7f5;
+    --card: #ffffff;
+    --border: rgba(0,0,0,0.1);
+    --text: #1a1a1a;
+    --muted: #6b6b6b;
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111110;
+      --card: #1c1c1b;
+      --border: rgba(255,255,255,0.1);
+      --text: #f0ede8;
+      --muted: #999;
+      --orange-light: #2a1500;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* ── NAV ── */
+  nav { background: var(--card); border-bottom: 0.5px solid var(--border); padding: 0 24px; display: flex; align-items: center; justify-content: space-between; height: 56px; position: sticky; top: 0; z-index: 100; }
+  .nav-brand { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 600; color: var(--text); }
+  .nav-brand .logo { width: 28px; height: 28px; background: var(--orange); border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+  .nav-brand .logo svg { width: 16px; height: 16px; fill: white; }
+  .nav-tabs { display: flex; gap: 4px; }
+  .nav-tab { padding: 6px 14px; border-radius: var(--radius-sm); font-size: 13px; cursor: pointer; border: none; background: transparent; color: var(--muted); transition: all 0.15s; }
+  .nav-tab.active { background: var(--orange-light); color: var(--orange); font-weight: 500; }
+  .nav-right { display: flex; align-items: center; gap: 10px; }
+  .btn-disconnect { font-size: 12px; padding: 5px 12px; border-radius: 6px; border: 0.5px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; }
+  .athlete-pill { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  .athlete-avatar { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; }
+
+  /* ── VIEWS ── */
+  .view { display: none; padding: 28px 24px; max-width: 960px; margin: 0 auto; }
+  .view.active { display: block; }
+
+  /* ── AUTH SCREEN ── */
+  #auth-view { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: calc(100vh - 56px); padding: 40px 24px; }
+  .auth-card { background: var(--card); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 36px 40px; max-width: 440px; width: 100%; }
+  .auth-logo { width: 48px; height: 48px; background: var(--orange); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-bottom: 20px; }
+  .auth-logo svg { width: 28px; height: 28px; fill: white; }
+  .auth-card h1 { font-size: 22px; font-weight: 600; margin-bottom: 6px; }
+  .auth-card p { font-size: 14px; color: var(--muted); line-height: 1.6; margin-bottom: 24px; }
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--text); }
+  .field input { width: 100%; padding: 9px 12px; border: 0.5px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); font-size: 14px; outline: none; transition: border 0.15s; font-family: monospace; }
+  .field input:focus { border-color: var(--orange); }
+  .field .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .btn-orange { width: 100%; padding: 11px; background: var(--orange); color: white; border: none; border-radius: var(--radius-sm); font-size: 15px; font-weight: 600; cursor: pointer; transition: background 0.15s; margin-top: 8px; }
+  .btn-orange:hover { background: var(--orange-dark); }
+  .btn-orange:disabled { opacity: 0.5; cursor: not-allowed; }
+  .setup-link { font-size: 12px; color: var(--orange); text-align: center; margin-top: 16px; cursor: pointer; text-decoration: underline; }
+  .divider { border: none; border-top: 0.5px solid var(--border); margin: 20px 0; }
+  .code-section { display: none; }
+  .code-section.show { display: block; }
+  .code-section p { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+
+  /* ── STATS GRID ── */
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .stat-card { background: var(--card); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 18px 20px; }
+  .stat-label { font-size: 12px; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .stat-value { font-size: 26px; font-weight: 600; color: var(--text); }
+  .stat-unit { font-size: 14px; font-weight: 400; color: var(--muted); margin-left: 3px; }
+  .stat-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  /* ── CHARTS ── */
+  .chart-card { background: var(--card); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 20px 24px; margin-bottom: 20px; }
+  .chart-title { font-size: 14px; font-weight: 500; margin-bottom: 16px; color: var(--text); }
+  .chart-wrap { position: relative; width: 100%; }
+
+  /* ── ACTIVITY LIST ── */
+  .section-title { font-size: 16px; font-weight: 500; margin-bottom: 14px; }
+  .activity-list { display: flex; flex-direction: column; gap: 8px; }
+  .activity-item { background: var(--card); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 16px 20px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 16px; cursor: pointer; transition: border-color 0.15s; }
+  .activity-item:hover { border-color: var(--orange); }
+  .act-icon { width: 36px; height: 36px; background: var(--orange-light); border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+  .act-icon svg { width: 18px; height: 18px; stroke: var(--orange); fill: none; stroke-width: 2; stroke-linecap: round; }
+  .act-name { font-size: 14px; font-weight: 500; color: var(--text); }
+  .act-date { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .act-stats { display: flex; gap: 20px; text-align: right; }
+  .act-stat { }
+  .act-stat-val { font-size: 14px; font-weight: 500; color: var(--text); }
+  .act-stat-lbl { font-size: 11px; color: var(--muted); }
+
+  /* ── FILTER BAR ── */
+  .filter-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+  .filter-chip { padding: 5px 14px; border-radius: 20px; border: 0.5px solid var(--border); background: transparent; font-size: 13px; color: var(--muted); cursor: pointer; transition: all 0.15s; }
+  .filter-chip.active { background: var(--orange); border-color: var(--orange); color: white; font-weight: 500; }
+  .filter-right { margin-left: auto; }
+  select.filter-select { padding: 5px 10px; border: 0.5px solid var(--border); border-radius: var(--radius-sm); background: var(--card); color: var(--text); font-size: 13px; cursor: pointer; }
+
+  /* ── LOADING ── */
+  .loading { text-align: center; padding: 60px 0; color: var(--muted); }
+  .spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--orange); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 14px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── EMPTY ── */
+  .empty { text-align: center; padding: 60px 0; color: var(--muted); font-size: 14px; }
+
+  /* ── PERSONAL RECORDS ── */
+  .pr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .pr-card { background: var(--card); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 16px 20px; }
+  .pr-dist { font-size: 13px; font-weight: 500; color: var(--orange); margin-bottom: 4px; }
+  .pr-time { font-size: 22px; font-weight: 600; }
+  .pr-pace { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .pr-date { font-size: 11px; color: var(--muted); margin-top: 6px; }
+
+#dashboard-view { position: relative; }
+  .tab-panels > div { display: none; }
+  .tab-panels > div.active { display: block; }
+
+  /* ── DETAIL VIEW ── */
+  .splits-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .splits-table th { text-align:left; padding:6px 10px; color:var(--muted); font-weight:500; border-bottom:0.5px solid var(--border); white-space:nowrap; }
+  .splits-table td { padding:7px 10px; border-bottom:0.5px solid var(--border); color:var(--text); white-space:nowrap; }
+  .splits-table tr:last-child td { border-bottom:none; }
+  .splits-table tr:hover td { background:var(--bg); }
+  .zone-bar-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; font-size:13px; }
+  .zone-label { width:58px; color:var(--muted); flex-shrink:0; }
+  .zone-bar-bg { flex:1; height:10px; background:var(--bg); border-radius:5px; overflow:hidden; }
+  .zone-bar-fill { height:100%; border-radius:5px; transition:width 0.4s; }
+  .zone-pct { width:36px; text-align:right; color:var(--text); font-weight:500; flex-shrink:0; }
+  @media(max-width:600px) { #detail-hr-split-grid { grid-template-columns:1fr !important; } }
+  .map-stat-pill { flex:1; padding:10px 16px; text-align:center; border-right:0.5px solid var(--border); }
+  .map-stat-pill:last-child { border-right:none; }
+  .map-stat-pill .lbl { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em; }
+  .map-stat-pill .val { font-size:15px; font-weight:500; margin-top:2px; }
+
+  .error-msg { background: #fff1f0; border: 0.5px solid #ffccc7; border-radius: var(--radius-sm); padding: 10px 14px; font-size: 13px; color: #cf1322; margin-bottom: 16px; display: none; }
+  .error-msg.show { display: block; }
+  /* ── HEATMAP ── */
+  .heatmap-cell { width:12px; height:12px; border-radius:2px; flex-shrink:0; transition: outline 0.1s; }
+  .heatmap-cell:hover { outline: 1.5px solid var(--orange); outline-offset: 1px; }
+  .heatmap-tooltip { position:fixed; background:var(--card); border:0.5px solid var(--border); border-radius:var(--radius-sm); padding:6px 10px; font-size:12px; color:var(--text); pointer-events:none; z-index:999; display:none; box-shadow:0 4px 12px rgba(0,0,0,0.1); white-space:nowrap; }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-brand">
+    <div class="logo">
+      <svg viewBox="0 0 24 24"><path d="M12 2L8 10h4l-4 12 12-9h-6z"/></svg>
+    </div>
+    Run Tracker
+  </div>
+  <div class="nav-tabs" id="nav-tabs" style="display:none">
+    <button class="nav-tab active" data-tab="overview">Overview</button>
+    <button class="nav-tab" data-tab="activities">Activities</button>
+    <button class="nav-tab" data-tab="records">Records</button>
+    <button class="nav-tab" data-tab="heatmap">Route Map</button>
+  </div>
+  <div class="nav-right" id="nav-right" style="display:none">
+    <div class="athlete-pill" id="athlete-pill"></div>
+    <button class="btn-disconnect" id="btn-disconnect">Disconnect</button>
+  </div>
+</nav>
+
+<!-- AUTH VIEW -->
+<div id="auth-view">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <svg viewBox="0 0 24 24"><path d="M12 2L8 10h4l-4 12 12-9h-6z"/></svg>
+    </div>
+    <h1>Connect Strava</h1>
+    <p>Enter your Strava API credentials to load your run data. Your data stays on your device.</p>
+
+    <div class="error-msg" id="auth-error"></div>
+
+    <div class="field">
+      <label>Client ID</label>
+      <input id="inp-client-id" type="text" placeholder="e.g. 12345" autocomplete="off">
+      <div class="hint">From strava.com/settings/api</div>
+    </div>
+    <div class="field">
+      <label>Client Secret</label>
+      <input id="inp-client-secret" type="password" placeholder="Your app's client secret">
+    </div>
+    <button class="btn-orange" id="btn-auth">Connect with Strava →</button>
+
+    <p class="setup-link" onclick="openStravaSetup()">Don't have an API app yet? Click here for setup instructions</p>
+    <div id="setup-instructions" style="display:none; margin-top:16px; font-size:13px; color:var(--muted); line-height:1.7; background:var(--bg); border-radius:8px; padding:14px;">
+      <strong style="color:var(--text)">Quick setup (2 min):</strong><br>
+      1. Go to <a href="https://www.strava.com/settings/api" target="_blank" style="color:var(--orange)">strava.com/settings/api</a><br>
+      2. Set <strong style="color:var(--text)">Authorization Callback Domain</strong> to <code style="background:var(--card);padding:2px 6px;border-radius:4px;">prezbo8.github.io</code><br>
+      3. Set <strong style="color:var(--text)">Website</strong> to <code style="background:var(--card);padding:2px 6px;border-radius:4px;">https://prezbo8.github.io</code><br>
+      4. Copy your <strong style="color:var(--text)">Client ID</strong> and <strong style="color:var(--text)">Client Secret</strong><br>
+      5. Enter them above and click "Connect with Strava"<br>
+      6. After authorizing, you'll be redirected back here automatically
+    </div>
+
+    <hr class="divider">
+    <p style="font-size:12px;color:var(--muted);text-align:center">After authorizing on Strava, you'll be redirected back here automatically.</p>
+  </div>
+</div>
+
+<!-- DASHBOARD VIEW -->
+<div id="dashboard-view" style="display:none">
+<div class="heatmap-tooltip" id="heatmap-tooltip"></div>
+  <div class="view active" id="tab-overview">
+    <div id="overview-loading" class="loading">
+      <div class="spinner"></div>
+      Loading your activities…
+    </div>
+    <div id="overview-content" style="display:none">
+      <div class="stats-grid" id="stats-grid"></div>
+      <div class="chart-card" style="margin-bottom:16px;">
+        <div class="chart-title">Running heatmap — daily mileage</div>
+        <div id="heatmap-container"></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Weekly distance (mi)</div>
+        <div style="position:relative; display:flex; height:220px;">
+          <div style="flex-shrink:0; width:56px; position:relative; z-index:2; background:var(--card);">
+            <canvas id="chart-weekly-yaxis" style="position:absolute;top:0;left:0;width:56px;height:100%;"></canvas>
+          </div>
+          <div style="flex:1; overflow-x:auto; overflow-y:hidden;">
+            <div id="weekly-wrap" style="height:220px; min-width:300px; position:relative;">
+              <canvas id="chart-weekly" role="img" aria-label="Weekly running distance chart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Pace over time (min/mi)</div>
+        <div style="position:relative; display:flex; height:320px;">
+    <div style="flex-shrink:0; width:80px; position:relative; z-index:2; background:var(--card);">
+      <canvas id="chart-pace-yaxis" style="position:absolute;top:0;left:0;width:80px;height:100%;"></canvas>
+    </div>
+    <div style="flex:1; overflow-x:auto; overflow-y:hidden;">
+      <div id="pace-wrap" style="height:320px; min-width:700px; position:relative;">
+        <canvas id="chart-pace" role="img" aria-label="Pace over time chart"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+    </div><!-- /overview-content -->
+  </div><!-- /tab-overview -->
+
+  <div class="view" id="tab-activities">
+    <div class="filter-bar">
+      <button class="filter-chip active" data-filter="all">All</button>
+      <button class="filter-chip" data-filter="Run">Run</button>
+      <button class="filter-chip" data-filter="Walk">Walk</button>
+      <button class="filter-chip" data-filter="Ride">Ride</button>
+      <div class="filter-right">
+        <select class="filter-select" id="period-select">
+          <option value="30">Last 30 days</option>
+          <option value="90">Last 90 days</option>
+          <option value="180">Last 6 months</option>
+          <option value="365">Last year</option>
+          <option value="all">All time</option>
+        </select>
+      </div>
+    </div>
+    <div class="activity-list" id="activity-list"></div>
+  </div>
+
+  <div class="view" id="tab-records">
+    <div class="section-title" style="margin-bottom:20px">Personal records — fastest paces per distance</div>
+    <div class="pr-grid" id="pr-grid"></div>
+  </div>
+
+  <div class="view" id="tab-heatmap" style="padding:0;">
+    <div id="route-heatmap-loading" class="loading" style="padding:60px 0;"><div class="spinner"></div>Building route map…</div>
+    <div id="route-heatmap-map" style="width:100%;height:calc(100vh - 56px);display:none;"></div>
+    <div id="route-heatmap-legend" style="display:none;position:absolute;bottom:32px;right:16px;z-index:1000;background:var(--card);border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--text);">
+      <div style="font-weight:500;margin-bottom:8px;">Run frequency</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+        <div style="width:80px;height:10px;border-radius:5px;background:linear-gradient(to right,#1a44c2,#00c8c8,#39ff14,#ffff00,#ff0000);"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;width:80px;font-size:10px;color:var(--muted);">
+        <span>Less</span><span>More</span>
+      </div>
+      <div id="route-heatmap-stats" style="margin-top:8px;padding-top:8px;border-top:0.5px solid var(--border);font-size:11px;color:var(--muted);"></div>
+    </div>
+  </div><!-- /tab-heatmap -->
+
+  <div class="view" id="tab-detail" style="display:none; padding: 28px 24px; max-width: 960px; margin: 0 auto;">
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+      <button id="btn-back" style="display:flex;align-items:center;gap:6px;padding:7px 14px;border:0.5px solid var(--border);border-radius:var(--radius-sm);background:transparent;color:var(--text);font-size:13px;cursor:pointer;">← Back</button>
+      <div>
+        <div id="detail-title" style="font-size:18px;font-weight:500;"></div>
+        <div id="detail-subtitle" style="font-size:13px;color:var(--muted);margin-top:2px;"></div>
+      </div>
+    </div>
+    <div id="detail-loading" class="loading"><div class="spinner"></div>Loading activity data…</div>
+    <div id="detail-content" style="display:none;">
+      <div id="detail-map-card" style="margin-bottom:20px; border-radius:var(--radius); overflow:hidden; border:0.5px solid var(--border); display:none;">
+        <div id="detail-map" style="height:340px; width:100%; background:var(--bg);"></div>
+        <div id="detail-map-stats" style="display:flex; gap:0; border-top:0.5px solid var(--border); background:var(--card);"></div>
+      </div>
+      <div class="stats-grid" id="detail-stats" style="margin-bottom:20px;"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;" id="detail-hr-split-grid">
+        <div class="chart-card" id="detail-hr-zones-card">
+          <div class="chart-title">Heart rate zones</div>
+          <div id="detail-hr-zones"></div>
+        </div>
+        <div class="chart-card" id="detail-splits-card">
+          <div class="chart-title">Mile splits</div>
+          <div id="detail-splits" style="overflow-x:auto;"></div>
+        </div>
+      </div>
+      <div class="chart-card" id="detail-pace-card" style="margin-bottom:16px;">
+        <div class="chart-title">Pace (min/mi)</div>
+        <div style="position:relative;display:flex;height:160px;">
+          <div style="flex-shrink:0;width:52px;position:relative;z-index:2;background:var(--card);"><canvas id="dc-pace-y" style="position:absolute;top:0;left:0;width:52px;height:100%;"></canvas></div>
+          <div style="flex:1;overflow-x:auto;overflow-y:hidden;"><div id="dc-pace-wrap" style="height:160px;min-width:300px;position:relative;"><canvas id="dc-pace" role="img" aria-label="Pace throughout activity"></canvas></div></div>
+        </div>
+      </div>
+      <div class="chart-card" id="detail-elev-card" style="margin-bottom:16px;">
+        <div class="chart-title">Elevation (ft)</div>
+        <div style="position:relative;display:flex;height:160px;">
+          <div style="flex-shrink:0;width:52px;position:relative;z-index:2;background:var(--card);"><canvas id="dc-elev-y" style="position:absolute;top:0;left:0;width:52px;height:100%;"></canvas></div>
+          <div style="flex:1;overflow-x:auto;overflow-y:hidden;"><div id="dc-elev-wrap" style="height:160px;min-width:300px;position:relative;"><canvas id="dc-elev" role="img" aria-label="Elevation throughout activity"></canvas></div></div>
+        </div>
+      </div>
+      <div class="chart-card" id="detail-hr-card" style="margin-bottom:16px;">
+        <div class="chart-title">Heart rate (bpm)</div>
+        <div style="position:relative;display:flex;height:160px;">
+          <div style="flex-shrink:0;width:52px;position:relative;z-index:2;background:var(--card);"><canvas id="dc-hr-y" style="position:absolute;top:0;left:0;width:52px;height:100%;"></canvas></div>
+          <div style="flex:1;overflow-x:auto;overflow-y:hidden;"><div id="dc-hr-wrap" style="height:160px;min-width:300px;position:relative;"><canvas id="dc-hr" role="img" aria-label="Heart rate throughout activity"></canvas></div></div>
+        </div>
+      </div>
+      <div class="chart-card" id="detail-pwr-card" style="margin-bottom:16px;">
+        <div class="chart-title">Power (watts)</div>
+        <div style="position:relative;display:flex;height:160px;">
+          <div style="flex-shrink:0;width:52px;position:relative;z-index:2;background:var(--card);"><canvas id="dc-pwr-y" style="position:absolute;top:0;left:0;width:52px;height:100%;"></canvas></div>
+          <div style="flex:1;overflow-x:auto;overflow-y:hidden;"><div id="dc-pwr-wrap" style="height:160px;min-width:300px;position:relative;"><canvas id="dc-pwr" role="img" aria-label="Power throughout activity"></canvas></div></div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /tab-detail -->
+
+</div><!-- /dashboard-view -->
+
+<script>
+const REDIRECT_URI = 'https://prezbo8.github.io/strava-tracker/';
+const SCOPE = 'activity:read_all';
+let accessToken = null;
+let activities = [];
+let weeklyChart = null, weeklyYAxis = null;
+let paceChart = null, paceYAxis = null;
+
+function save(key, val) { try { localStorage.setItem(key, val); } catch(e){} }
+function load(key) { try { return localStorage.getItem(key); } catch(e){ return null; } }
+
+function openStravaSetup() {
+  const el = document.getElementById('setup-instructions');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function showError(msg) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+document.getElementById('btn-auth').addEventListener('click', function handleConnect() {
+  console.log('=== CONNECT BUTTON CLICKED ===');
+  
+  const clientId = document.getElementById('inp-client-id').value.trim();
+  const secret = document.getElementById('inp-client-secret').value.trim();
+  const btn = document.getElementById('btn-auth');
+  
+  console.log('Client ID:', clientId);
+  console.log('Client Secret:', secret.substring(0, 10) + '...');
+  console.log('Redirect URI:', REDIRECT_URI);
+  
+  // Validate
+  if (!clientId || !secret) {
+    showError('Please enter both Client ID and Client Secret');
+    return;
+  }
+  
+  if (!/^\d+$/.test(clientId)) {
+    showError('Client ID must be a number');
+    return;
+  }
+  
+  if (secret.length < 20) {
+    showError('Client Secret seems too short');
+    return;
+  }
+  
+  // Save credentials
+  save('strava_client_id', clientId);
+  save('strava_client_secret', secret);
+  
+  // Build OAuth URL
+  const authUrl = new URL('https://www.strava.com/oauth/authorize');
+  authUrl.searchParams.set('client_id', clientId);
+  authUrl.searchParams.set('redirect_uri', REDIRECT_URI);
+  authUrl.searchParams.set('response_type', 'code');
+  authUrl.searchParams.set('scope', SCOPE);
+  
+  console.log('Auth URL:', authUrl.toString());
+  
+  // Update button
+  btn.disabled = true;
+  btn.textContent = 'Redirecting to Strava...';
+  showError('');
+  
+  // Redirect
+  console.log('Redirecting to:', authUrl.toString());
+  setTimeout(() => {
+    window.location.href = authUrl.toString();
+  }, 500);
+});
+
+async function refreshTokenIfNeeded() {
+  const expiresAt = parseInt(load('strava_expires_at') || '0');
+  if (Date.now() / 1000 < expiresAt - 300) return true;
+  const refreshToken = load('strava_refresh_token');
+  const clientId = load('strava_client_id');
+  const secret = load('strava_client_secret');
+  if (!refreshToken || !clientId || !secret) return false;
+  try {
+    const res = await fetch('https://www.strava.com/oauth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_id: clientId, client_secret: secret, refresh_token: refreshToken, grant_type: 'refresh_token' })
+    });
+    const data = await res.json();
+    if (data.access_token) {
+      save('strava_access_token', data.access_token);
+      save('strava_refresh_token', data.refresh_token);
+      save('strava_expires_at', data.expires_at);
+      accessToken = data.access_token;
+      return true;
+    }
+  } catch(e) {}
+  return false;
+}
+
+async function fetchAllActivities() {
+  let all = [];
+  let page = 1;
+  while (true) {
+    const res = await fetch(`https://www.strava.com/api/v3/athlete/activities?per_page=100&page=${page}`, {
+      headers: { 'Authorization': `Bearer ${accessToken}` }
+    });
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) break;
+    all = all.concat(data);
+    if (data.length < 100) break;
+    page++;
+  }
+  return all;
+}
+
+function metersToMi(m) { return (m / 1609.344).toFixed(2); }
+function mToMiNum(m) { return m / 1609.344; }
+function metersToFt(m) { return Math.round(m * 3.28084); }
+function secsToTime(s) {
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m ${sec}s`;
+}
+function paceStr(meters, seconds) {
+  if (!meters || !seconds) return '--';
+  const pace = seconds / (meters / 1609.344);
+  const m = Math.floor(pace / 60);
+  const s = Math.round(pace % 60);
+  return `${m}:${s.toString().padStart(2,'0')}`;
+}
+function fmtDate(iso) {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function launchDashboard() {
+  document.getElementById('auth-view').style.display = 'none';
+  document.getElementById('dashboard-view').style.display = 'block';
+  document.getElementById('nav-tabs').style.display = 'flex';
+  document.getElementById('nav-right').style.display = 'flex';
+
+  const athleteStr = load('strava_athlete');
+  if (athleteStr) {
+    try {
+      const a = JSON.parse(athleteStr);
+      const pill = document.getElementById('athlete-pill');
+      const imgEl = a.profile_medium ? `<img class="athlete-avatar" src="${a.profile_medium}" alt="">` : '';
+      pill.innerHTML = `${imgEl}<span>${a.firstname} ${a.lastname}</span>`;
+    } catch(e) {}
+  }
+
+  loadDashboard();
+}
+
+async function loadDashboard() {
+  const ok = await refreshTokenIfNeeded();
+  if (!ok) { disconnect(); return; }
+  try {
+    activities = await fetchAllActivities();
+    save('strava_activities_cache', JSON.stringify(activities));
+  } catch(e) {
+    const cached = load('strava_activities_cache');
+    if (cached) activities = JSON.parse(cached);
+  }
+  document.getElementById('overview-loading').style.display = 'none';
+  document.getElementById('overview-content').style.display = 'block';
+  renderOverview();
+  renderActivities();
+  renderRecords();
+  renderRouteHeatmap();
+}
+
+function renderOverview() {
+  const runs = activities.filter(a => a.type === 'Run');
+  const totalDist = runs.reduce((s, a) => s + a.distance, 0);
+  const totalTime = runs.reduce((s, a) => s + a.moving_time, 0);
+  const totalElev = runs.reduce((s, a) => s + (a.total_elevation_gain || 0), 0);
+  const avgPaceArr = runs.filter(a => a.distance > 0).map(a => a.moving_time / (a.distance / 1609.344));
+  const avgPace = avgPaceArr.length ? avgPaceArr.reduce((a,b) => a+b,0) / avgPaceArr.length : 0;
+  const avgPaceM = Math.floor(avgPace / 60);
+  const avgPaceS = Math.round(avgPace % 60);
+
+  const now = new Date();
+  const thirtyAgo = new Date(now - 30 * 86400000);
+  const recentRuns = runs.filter(a => new Date(a.start_date) >= thirtyAgo);
+  const recentDist = recentRuns.reduce((s, a) => s + a.distance, 0);
+
+  document.getElementById('stats-grid').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Total runs</div><div class="stat-value">${runs.length}</div><div class="stat-sub">${recentRuns.length} last 30 days</div></div>
+    <div class="stat-card"><div class="stat-label">Total distance</div><div class="stat-value">${(totalDist/1609.344).toFixed(0)}<span class="stat-unit">mi</span></div><div class="stat-sub">${(recentDist/1609.344).toFixed(1)} mi last 30 days</div></div>
+    <div class="stat-card"><div class="stat-label">Time on feet</div><div class="stat-value">${Math.round(totalTime/3600)}<span class="stat-unit">hrs</span></div><div class="stat-sub">~${runs.length ? (Math.round(totalTime/3600/runs.length*10)/10) : 0}h avg per run</div></div>
+    <div class="stat-card"><div class="stat-label">Avg pace</div><div class="stat-value">${avgPaceM}:${avgPaceS.toString().padStart(2,'0')}<span class="stat-unit">/mi</span></div><div class="stat-sub">Across all runs</div></div>
+    <div class="stat-card"><div class="stat-label">Elevation</div><div class="stat-value">${metersToFt(totalElev).toLocaleString()}<span class="stat-unit">ft</span></div><div class="stat-sub">Total climbed</div></div>
+  `;
+
+  renderCalendarHeatmap();
+
+  // ── Build weekly buckets from all runs ──
+  const runWeeks = {};
+  runs.forEach(a => {
+    const d = new Date(a.start_date);
+    const day = d.getDay();
+    const mon = new Date(d - (day === 0 ? 6 : day - 1) * 86400000);
+    const key = mon.toISOString().slice(0,10);
+    runWeeks[key] = (runWeeks[key] || 0) + a.distance / 1609.344;
+  });
+
+  // ── Fill every week May 2025 → today ──
+  const rangeStart = new Date('2025-04-28'); // Monday of week containing May 1 2025
+  const today = new Date();
+  const todayDay = today.getDay();
+  const thisMonday = new Date(today);
+  thisMonday.setDate(today.getDate() - (todayDay === 0 ? 6 : todayDay - 1));
+  const allWeeks = [];
+  let wk = new Date(rangeStart);
+  while (wk <= thisMonday) {
+    const key = wk.toISOString().slice(0,10);
+    allWeeks.push([key, parseFloat((runWeeks[key] || 0).toFixed(2))]);
+    wk = new Date(wk); wk.setDate(wk.getDate() + 7);
+  }
+
+  const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+  const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+  const labelColor = isDark ? '#888' : '#999';
+  const PAD_TOP = 8, PAD_BOT = 42;
+
+  // ── Weekly distance chart ──
+  const wMax = Math.ceil(Math.max(...allWeeks.map(([,v]) => v), 1) * 1.1);
+  const wMin = 0;
+
+  if (weeklyChart) weeklyChart.destroy();
+  if (weeklyYAxis) weeklyYAxis.destroy();
+
+  const weeklyWrap = document.getElementById('weekly-wrap');
+  weeklyWrap.style.width = Math.max(400, allWeeks.length * 18) + 'px';
+
+  const wyc = document.getElementById('chart-weekly-yaxis');
+  wyc.width = 56; wyc.height = wyc.parentElement.offsetHeight || 220;
+
+  weeklyYAxis = new Chart(wyc, {
+    type: 'bar',
+    data: { labels: allWeeks.map(([k]) => k), datasets: [{ data: allWeeks.map(([,v]) => v), backgroundColor:'transparent', borderColor:'transparent' }] },
+    options: {
+      responsive: false, maintainAspectRatio: false, animation: false,
+      plugins: { legend:{display:false}, tooltip:{enabled:false} },
+      scales: {
+        x: { display: false },
+        y: { min: wMin, max: wMax, grid:{color:gridColor}, ticks:{color:labelColor, font:{size:11}, maxTicksLimit:6} }
+      },
+      layout: { padding: { top: PAD_TOP, bottom: PAD_BOT, left: 0, right: 0 } }
+    }
+  });
+
+  weeklyChart = new Chart(document.getElementById('chart-weekly'), {
+    type: 'bar',
+    data: {
+      labels: allWeeks.map(([k]) => { const d = new Date(k); return d.toLocaleDateString('en-US',{month:'short',day:'numeric'}); }),
+      datasets: [{ label:'mi', data: allWeeks.map(([,v]) => v), backgroundColor:'#FC4C02cc', borderRadius:3, borderSkipped:false }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend:{display:false}, tooltip:{callbacks:{label: ctx => `${ctx.parsed.y.toFixed(2)} mi`}} },
+      scales: {
+        x: { grid:{color:gridColor}, ticks:{color:labelColor, font:{size:10}, maxRotation:45, autoSkip:true, maxTicksLimit:20} },
+        y: { display:false, min: wMin, max: wMax }
+      },
+      layout: { padding: { top: PAD_TOP, bottom: 0, left: 0, right: 4 } }
+    }
+  });
+
+  // ── Pace chart: May 2025 → today ──
+  const may2025 = new Date('2025-05-01');
+const paceRuns = runs
+  .filter(a => a.distance > 1000 && new Date(a.start_date) >= may2025)
+  .sort((a,b) => new Date(a.start_date) - new Date(b.start_date));
+
+if (paceChart) paceChart.destroy();
+if (paceYAxis) paceYAxis.destroy();
+
+const paceWrap = document.getElementById('pace-wrap');
+paceWrap.style.width = Math.max(800, paceRuns.length * 42) + 'px';
+
+const paceData = paceRuns.map(a => {
+  const pace = a.moving_time / (a.distance / 1609.344) / 60;
+  return parseFloat(pace.toFixed(2));
+});
+
+const pMin = paceData.length ? Math.max(4, Math.floor(Math.min(...paceData)) - 1) : 6;
+const pMax = paceData.length ? Math.ceil(Math.max(...paceData)) + 1 : 16;
+
+const paceTick = v => {
+  const m = Math.floor(v);
+  const s = Math.round((v - m) * 60);
+  return `${m}:${s.toString().padStart(2,'0')}`;
+};
+
+const pyc = document.getElementById('chart-pace-yaxis');
+pyc.width = 80;                    // Wider for better label space
+pyc.height = pyc.parentElement.offsetHeight || 320;
+
+// Left y-axis
+paceYAxis = new Chart(pyc, {
+  type: 'line',
+  data: { 
+    labels: paceRuns.map(a => a.start_date), 
+    datasets: [{ 
+      data: paceData, 
+      backgroundColor: 'transparent', 
+      borderColor: 'transparent', 
+      pointRadius: 0 
+    }] 
+  },
+  options: {
+    responsive: false, 
+    maintainAspectRatio: false, 
+    animation: false,
+    plugins: { legend:{display:false}, tooltip:{enabled:false} },
+    scales: {
+      x: { display: false },
+      y: { 
+        min: pMin, 
+        max: pMax, 
+        reverse: true, 
+        grid: { color: gridColor },
+        ticks: { 
+          color: labelColor, 
+          font: { size: 13, weight: '500' },
+          callback: paceTick,
+          maxTicksLimit: 10,
+          padding: 15,
+          align: 'right'
+        } 
+      }
+    },
+    layout: { 
+      padding: { top: 20, bottom: 40, left: 12, right: 12 } 
+    }
+  }
+});
+
+// Main pace chart
+paceChart = new Chart(document.getElementById('chart-pace'), {
+  type: 'line',
+  data: {
+    labels: paceRuns.map(a => fmtDate(a.start_date)),
+    datasets: [{ 
+      label: 'min/mi', 
+      data: paceData, 
+      borderColor: '#FC4C02', 
+      backgroundColor: 'rgba(252,76,2,0.08)', 
+      fill: true, 
+      tension: 0.2, 
+      pointRadius: 3, 
+      pointBackgroundColor: '#FC4C02',
+      pointHoverRadius: 5
+    }]
+  },
+  options: {
+    responsive: true, 
+    maintainAspectRatio: false,
+    plugins: { 
+      legend: { display: false }, 
+      tooltip: { 
+        callbacks: { 
+          label: ctx => `Pace: ${paceTick(ctx.parsed.y)}` 
+        } 
+      } 
+    },
+    scales: {
+      x: { 
+        grid: { color: gridColor },
+        ticks: { 
+          color: labelColor, 
+          font: { size: 10 }, 
+          maxRotation: 45, 
+          autoSkip: false,           // Show ALL dates
+          maxTicksLimit: paceRuns.length   // Force all labels
+        } 
+      },
+      y: { display: false, min: pMin, max: pMax, reverse: true }
+    },
+    layout: { padding: { top: PAD_TOP, bottom: 0, left: 0, right: 12 } }
+  }
+  });
+}
+
+function renderCalendarHeatmap() {
+  const container = document.getElementById('heatmap-container');
+  if (!container) return;
+
+  // Build day → miles map
+  const runsByDay = {};
+  activities.filter(a => a.type === 'Run').forEach(a => {
+    const key = a.start_date.slice(0, 10);
+    runsByDay[key] = (runsByDay[key] || 0) + a.distance / 1609.344;
+  });
+
+  // Date range: Monday of week containing May 1 2025 → today
+  const rangeStart = new Date('2025-04-28');
+  const today = new Date();
+  today.setHours(0,0,0,0);
+
+  // Build week columns (each col = Mon–Sun)
+  const weeks = [];
+  let cur = new Date(rangeStart);
+  while (cur <= today) {
+    const week = [];
+    for (let d = 0; d < 7; d++) {
+      week.push(new Date(cur));
+      cur.setDate(cur.getDate() + 1);
+    }
+    weeks.push(week);
+  }
+
+  const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+  const emptyColor = isDark ? '#2a2a28' : '#f0ede8';
+  const levels = [
+    isDark ? '#3d1a0a' : '#ffe4d4',
+    isDark ? '#7a2e0a' : '#ffb380',
+    isDark ? '#b84010' : '#ff7a3d',
+    '#FC4C02'
+  ];
+
+  function getLevel(miles) {
+    if (miles <= 0) return -1;
+    if (miles < 3) return 0;
+    if (miles < 6) return 1;
+    if (miles < 10) return 2;
+    return 3;
+  }
+
+  // Month label positions
+  const monthPositions = {};
+  weeks.forEach((week, wi) => {
+    week.forEach(day => {
+      if (day.getDate() === 1 || (wi === 0 && day.getDay() === 1)) {
+        if (!monthPositions[wi]) monthPositions[wi] = day.toLocaleDateString('en-US', { month: 'short' });
+      }
+    });
+  });
+
+  const tooltip = document.getElementById('heatmap-tooltip');
+
+  // Render
+  const CELL = 13, GAP = 3;
+  const dayLabels = ['Mon','','Wed','','Fri','','Sun'];
+
+  let html = `<div style="display:flex;gap:0;align-items:flex-start;overflow-x:auto;padding-bottom:4px;">
+    <div style="display:flex;flex-direction:column;gap:${GAP}px;margin-right:6px;padding-top:${CELL+GAP+4}px;flex-shrink:0;">
+      ${dayLabels.map(d => `<div style="height:${CELL}px;line-height:${CELL}px;font-size:10px;color:var(--muted);text-align:right;white-space:nowrap;">${d}</div>`).join('')}
+    </div>
+    <div style="display:flex;flex-direction:column;">
+      <div style="display:flex;gap:${GAP}px;margin-bottom:4px;height:${CELL}px;">
+        ${weeks.map((_, wi) => `<div style="width:${CELL}px;flex-shrink:0;font-size:10px;color:var(--muted);overflow:visible;white-space:nowrap;">${monthPositions[wi] ? `<span style="display:inline-block;transform:translateX(-2px);">${monthPositions[wi]}</span>` : ''}</div>`).join('')}
+      </div>
+      <div style="display:flex;gap:${GAP}px;" id="heatmap-cells">
+        ${weeks.map(week => `
+          <div style="display:flex;flex-direction:column;gap:${GAP}px;flex-shrink:0;">
+            ${week.map(day => {
+              const key = day.toISOString().slice(0,10);
+              const miles = runsByDay[key] || 0;
+              const level = getLevel(miles);
+              const isFuture = day > today;
+              const bg = isFuture ? 'transparent' : (level === -1 ? emptyColor : levels[level]);
+              const border = isFuture ? 'none' : `0.5px solid rgba(0,0,0,0.06)`;
+              const dateStr = day.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+              const label = miles > 0 ? `${dateStr} — ${miles.toFixed(2)} mi` : dateStr;
+              return `<div class="heatmap-cell" data-label="${label}" data-miles="${miles.toFixed(2)}" style="width:${CELL}px;height:${CELL}px;background:${bg};border:${border};border-radius:2px;flex-shrink:0;"></div>`;
+            }).join('')}
+          </div>`).join('')}
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:5px;margin-top:10px;font-size:11px;color:var(--muted);">
+    <span>Less</span>
+    <div style="width:${CELL}px;height:${CELL}px;border-radius:2px;background:${emptyColor};border:0.5px solid rgba(0,0,0,0.06);flex-shrink:0;"></div>
+    ${levels.map(c => `<div style="width:${CELL}px;height:${CELL}px;border-radius:2px;background:${c};flex-shrink:0;"></div>`).join('')}
+    <span>More</span>
+    <span style="margin-left:10px;color:var(--muted);">0 · &lt;3 mi · 3–6 mi · 6–10 mi · 10+ mi</span>
+  </div>`;
+
+  container.innerHTML = html;
+
+  // Tooltip events
+  container.querySelectorAll('.heatmap-cell').forEach(cell => {
+    cell.addEventListener('mousemove', e => {
+      const miles = parseFloat(cell.dataset.miles);
+      const label = cell.dataset.label;
+      tooltip.style.display = 'block';
+      tooltip.innerHTML = `<strong>${label}</strong>${miles > 0 ? `<br><span style="color:var(--orange)">${miles} mi</span>` : ''}`;
+      tooltip.style.left = (e.clientX + 12) + 'px';
+      tooltip.style.top = (e.clientY - 8) + 'px';
+    });
+    cell.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+  });
+}
+
+function renderActivities(filter='all', days=90) {
+  const list = document.getElementById('activity-list');
+  let filtered = activities;
+  if (filter !== 'all') filtered = filtered.filter(a => a.type === filter);
+  if (days !== 'all') {
+    const cutoff = new Date(Date.now() - days * 86400000);
+    filtered = filtered.filter(a => new Date(a.start_date) >= cutoff);
+  }
+  if (filtered.length === 0) { list.innerHTML = '<div class="empty">No activities found for this filter.</div>'; return; }
+  list.innerHTML = filtered.slice(0, 100).map(a => `
+    <div class="activity-item" data-id="${a.id}" style="cursor:pointer;">
+      <div class="act-icon">
+        <svg viewBox="0 0 24 24"><path d="M13 4a1 1 0 1 0 2 0 1 1 0 0 0-2 0"/><path d="M7.5 17.5L10 14l2 2 2.5-4"/><path d="M3 20l4-4"/></svg>
+      </div>
+      <div>
+        <div class="act-name">${a.name}</div>
+        <div class="act-date">${fmtDate(a.start_date)} · ${a.type}</div>
+      </div>
+      <div class="act-stats">
+        <div class="act-stat"><div class="act-stat-val">${metersToMi(a.distance)}</div><div class="act-stat-lbl">mi</div></div>
+        <div class="act-stat"><div class="act-stat-val">${secsToTime(a.moving_time)}</div><div class="act-stat-lbl">time</div></div>
+        <div class="act-stat"><div class="act-stat-val">${paceStr(a.distance, a.moving_time)}</div><div class="act-stat-lbl">min/mi</div></div>
+      </div>
+    </div>
+  `).join('');
+
+  document.querySelectorAll('.activity-item[data-id]').forEach(el => {
+    el.addEventListener('click', () => openActivityDetail(parseInt(el.dataset.id)));
+  });
+}
+
+function renderRecords() {
+  const runs = activities.filter(a => a.type === 'Run' && a.distance > 0);
+  const targets = [
+    { name: '1 mile', min: 1500, max: 1800 },
+    { name: '5K', min: 4500, max: 5500 },
+    { name: '10K', min: 9000, max: 11000 },
+    { name: 'Half marathon', min: 20000, max: 23000 },
+    { name: 'Marathon', min: 40000, max: 44000 },
+  ];
+  const grid = document.getElementById('pr-grid');
+  const cards = targets.map(t => {
+    const candidates = runs.filter(a => a.distance >= t.min && a.distance <= t.max);
+    if (candidates.length === 0) return `<div class="pr-card"><div class="pr-dist">${t.name}</div><div class="pr-time" style="font-size:16px;color:var(--muted)">No runs yet</div></div>`;
+    const best = candidates.reduce((b, a) => {
+      const pace = a.moving_time / (a.distance / 1609.344);
+      const bpace = b.moving_time / (b.distance / 1609.344);
+      return pace < bpace ? a : b;
+    });
+    const pace = best.moving_time / (best.distance / 1609.344);
+    const pm = Math.floor(pace / 60);
+    const ps = Math.round(pace % 60);
+    return `<div class="pr-card">
+      <div class="pr-dist">${t.name}</div>
+      <div class="pr-time">${secsToTime(best.moving_time)}</div>
+      <div class="pr-pace">${pm}:${ps.toString().padStart(2,'0')} min/mi · ${metersToMi(best.distance)} mi</div>
+      <div class="pr-date">${fmtDate(best.start_date)}</div>
+    </div>`;
+  });
+  grid.innerHTML = cards.join('');
+}
+
+// ── ROUTE HEATMAP ──────────────────────────────────────────────
+let routeHeatmapMap = null;
+
+function renderRouteHeatmap() {
+  const mapEl = document.getElementById('route-heatmap-map');
+  const loadingEl = document.getElementById('route-heatmap-loading');
+  const legendEl = document.getElementById('route-heatmap-legend');
+
+  // Collect all GPS points from summary_polylines
+  const runs = activities.filter(a => a.type === 'Run' && a.map?.summary_polyline);
+  if (!runs.length) {
+    loadingEl.innerHTML = '<p style="color:var(--muted);font-size:14px;">No GPS data found in your activities.</p>';
+    return;
+  }
+
+  const heatPoints = [];
+  const allCoords = [];
+
+  runs.forEach(a => {
+    try {
+      const coords = decodePolylineLocal(a.map.summary_polyline);
+      coords.forEach(([lat, lng]) => {
+        heatPoints.push([lat, lng, 1]);
+        allCoords.push([lat, lng]);
+      });
+    } catch(e) {}
+  });
+
+  if (!heatPoints.length) {
+    loadingEl.innerHTML = '<p style="color:var(--muted);font-size:14px;">No GPS data to display.</p>';
+    return;
+  }
+
+  loadingEl.style.display = 'none';
+  mapEl.style.display = 'block';
+  legendEl.style.display = 'block';
+
+  if (routeHeatmapMap) { routeHeatmapMap.remove(); routeHeatmapMap = null; }
+
+  const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+  const tileUrl = isDark
+    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+    : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+
+  routeHeatmapMap = L.map('route-heatmap-map', { zoomControl: true, attributionControl: false });
+  L.tileLayer(tileUrl, { maxZoom: 19 }).addTo(routeHeatmapMap);
+
+  // Auto-fit to all route bounds
+  const bounds = L.latLngBounds(allCoords);
+  routeHeatmapMap.fitBounds(bounds, { padding: [40, 40] });
+
+  // Heat layer — blue (rare) → cyan → green → yellow → red (frequent)
+  L.heatLayer(heatPoints, {
+    radius: 10,
+    blur: 14,
+    maxZoom: 17,
+    max: 1,
+    gradient: {
+      0.0: '#1a44c2',
+      0.25: '#00c8c8',
+      0.5: '#39ff14',
+      0.75: '#ffff00',
+      1.0: '#ff0000'
+    }
+  }).addTo(routeHeatmapMap);
+
+  // Stats
+  const totalMi = runs.reduce((s, a) => s + a.distance / 1609.344, 0);
+  document.getElementById('route-heatmap-stats').innerHTML =
+    `${runs.length} runs · ${totalMi.toFixed(0)} mi total`;
+}
+
+// Standalone polyline decoder (used before decodePolyline is defined)
+function decodePolylineLocal(str) {
+  let index = 0, lat = 0, lng = 0;
+  const coords = [];
+  while (index < str.length) {
+    let b, shift = 0, result = 0;
+    do { b = str.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+    lat += (result & 1) ? ~(result >> 1) : (result >> 1);
+    shift = 0; result = 0;
+    do { b = str.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+    lng += (result & 1) ? ~(result >> 1) : (result >> 1);
+    coords.push([lat / 1e5, lng / 1e5]);
+  }
+  return coords;
+}
+
+// ── ACTIVITY DETAIL ──────────────────────────────────────────────
+let detailCharts = {};
+let leafletMap = null;
+let prevTab = 'activities';
+
+function decodePolyline(str) {
+  let index = 0, lat = 0, lng = 0;
+  const coords = [];
+  while (index < str.length) {
+    let b, shift = 0, result = 0;
+    do { b = str.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+    lat += (result & 1) ? ~(result >> 1) : (result >> 1);
+    shift = 0; result = 0;
+    do { b = str.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+    lng += (result & 1) ? ~(result >> 1) : (result >> 1);
+    coords.push([lat / 1e5, lng / 1e5]);
+  }
+  return coords;
+}
+
+function renderActivityMap(detail) {
+  const mapCard = document.getElementById('detail-map-card');
+  const polylineStr = detail.map?.polyline || detail.map?.summary_polyline;
+  if (!polylineStr) { mapCard.style.display = 'none'; return; }
+
+  const coords = decodePolyline(polylineStr);
+  if (!coords.length) { mapCard.style.display = 'none'; return; }
+
+  mapCard.style.display = 'block';
+
+  if (leafletMap) { leafletMap.remove(); leafletMap = null; }
+
+  const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+  const tileUrl = isDark
+    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+    : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+
+  leafletMap = L.map('detail-map', { zoomControl: true, attributionControl: false, scrollWheelZoom: true });
+  L.tileLayer(tileUrl, { maxZoom: 19, attribution: '© CartoDB © OpenStreetMap' }).addTo(leafletMap);
+
+  const route = L.polyline(coords, { color: '#FC4C02', weight: 4, opacity: 0.9, lineCap: 'round', lineJoin: 'round' }).addTo(leafletMap);
+  leafletMap.fitBounds(route.getBounds(), { padding: [32, 32] });
+
+  // Start dot — green
+  L.circleMarker(coords[0], { radius: 8, fillColor: '#22c55e', color: '#fff', weight: 2.5, fillOpacity: 1 })
+    .bindTooltip('Start', { permanent: false, direction: 'top' }).addTo(leafletMap);
+  // End dot — red
+  L.circleMarker(coords[coords.length - 1], { radius: 8, fillColor: '#ef4444', color: '#fff', weight: 2.5, fillOpacity: 1 })
+    .bindTooltip('Finish', { permanent: false, direction: 'top' }).addTo(leafletMap);
+
+  // Quick-stat bar under the map
+  const avgPaceSecs = detail.distance > 0 ? detail.moving_time / (detail.distance / 1609.344) : 0;
+  const pm = Math.floor(avgPaceSecs / 60), ps = Math.round(avgPaceSecs % 60);
+  const statsBar = [
+    { lbl: 'Distance', val: metersToMi(detail.distance) + ' mi' },
+    { lbl: 'Duration', val: secsToTime(detail.moving_time) },
+    { lbl: 'Avg pace', val: `${pm}:${ps.toString().padStart(2,'0')} /mi` },
+    { lbl: 'Elev gain', val: detail.total_elevation_gain ? metersToFt(detail.total_elevation_gain).toLocaleString() + ' ft' : '--' },
+  ];
+  if (detail.average_heartrate) statsBar.push({ lbl: 'Avg HR', val: Math.round(detail.average_heartrate) + ' bpm' });
+  document.getElementById('detail-map-stats').innerHTML = statsBar.map(s =>
+    `<div class="map-stat-pill"><div class="lbl">${s.lbl}</div><div class="val">${s.val}</div></div>`
+  ).join('');
+}
+
+function downsample(arr, max = 300) {
+  if (!arr || arr.length <= max) return arr;
+  const step = Math.ceil(arr.length / max);
+  return arr.filter((_, i) => i % step === 0);
+}
+
+async function fetchActivityDetail(id) {
+  const res = await fetch(`https://www.strava.com/api/v3/activities/${id}`, {
+    headers: { 'Authorization': `Bearer ${accessToken}` }
+  });
+  return res.json();
+}
+
+async function fetchStreams(id) {
+  const keys = 'heartrate,watts,altitude,velocity_smooth,distance,time,grade_smooth';
+  const res = await fetch(`https://www.strava.com/api/v3/activities/${id}/streams?keys=${keys}&key_by_type=true`, {
+    headers: { 'Authorization': `Bearer ${accessToken}` }
+  });
+  return res.json();
+}
+
+function calcMileSplits(streams) {
+  const dist = streams.distance?.data;
+  const time = streams.time?.data;
+  const hr = streams.heartrate?.data;
+  const alt = streams.altitude?.data;
+  const vel = streams.velocity_smooth?.data;
+  if (!dist || !time) return [];
+  const splits = [];
+  let mileNum = 1;
+  let prevIdx = 0;
+  while (mileNum * 1609.344 <= dist[dist.length - 1]) {
+    const idx = dist.findIndex(d => d >= mileNum * 1609.344);
+    if (idx < 0) break;
+    const splitSecs = time[idx] - time[prevIdx];
+    const splitDist = dist[idx] - dist[prevIdx];
+    const pace = splitSecs / (splitDist / 1609.344);
+    const pm = Math.floor(pace / 60);
+    const ps = Math.round(pace % 60);
+    const avgHR = hr ? Math.round(hr.slice(prevIdx, idx + 1).reduce((a, b) => a + b, 0) / (idx - prevIdx + 1)) : null;
+    const elevGain = alt ? Math.max(0, Math.round((alt[idx] - alt[prevIdx]) * 3.28084)) : null;
+    splits.push({ mile: mileNum, pace: `${pm}:${ps.toString().padStart(2, '0')}`, time: secsToTime(splitSecs), avgHR, elevGain });
+    prevIdx = idx;
+    mileNum++;
+  }
+  return splits;
+}
+
+function calcHRZones(hrData, maxHR) {
+  const mhr = maxHR || 190;
+  const counts = [0, 0, 0, 0, 0];
+  hrData.forEach(hr => {
+    const p = hr / mhr * 100;
+    if (p < 60) counts[0]++;
+    else if (p < 70) counts[1]++;
+    else if (p < 80) counts[2]++;
+    else if (p < 90) counts[3]++;
+    else counts[4]++;
+  });
+  const total = hrData.length || 1;
+  return counts.map(c => Math.round(c / total * 100));
+}
+
+function makeDetailChart(canvasId, yCanvasId, wrapId, labels, dataset, yOpts, height = 160, type = 'line') {
+  if (detailCharts[canvasId]) { detailCharts[canvasId].destroy(); delete detailCharts[canvasId]; }
+  if (detailCharts[yCanvasId]) { detailCharts[yCanvasId].destroy(); delete detailCharts[yCanvasId]; }
+  const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+  const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+  const labelColor = isDark ? '#888' : '#999';
+  const wrap = document.getElementById(wrapId);
+  wrap.style.width = Math.max(300, labels.length * (type === 'bar' ? 28 : 4)) + 'px';
+  const yc = document.getElementById(yCanvasId);
+  yc.height = yc.parentElement.offsetHeight;
+  detailCharts[yCanvasId] = new Chart(yc, {
+    type,
+    data: { labels, datasets: [{ data: dataset.data, backgroundColor: 'transparent', borderColor: 'transparent', pointRadius: 0 }] },
+    options: {
+      responsive: false, maintainAspectRatio: false, animation: false,
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales: { x: { display: false }, y: { ...yOpts, grid: { color: gridColor }, ticks: { ...( yOpts.ticks || {}), color: labelColor, font: { size: 11 } } } },
+      layout: { padding: { top: 6, bottom: 24 } }
+    }
+  });
+  const yScale = detailCharts[yCanvasId].scales.y;
+  detailCharts[canvasId] = new Chart(document.getElementById(canvasId), {
+    type,
+    data: { labels, datasets: [{ ...dataset, data: dataset.data }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: dataset.tooltipFn ? ctx => dataset.tooltipFn(ctx.parsed.y) : undefined } } },
+      scales: {
+        x: { grid: { color: gridColor }, ticks: { color: labelColor, font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 } },
+        y: { display: false, min: yScale.min, max: yScale.max, reverse: yOpts.reverse || false }
+      }
+    }
+  });
+}
+
+async function openActivityDetail(activityId) {
+  prevTab = document.querySelector('.nav-tab.active')?.dataset.tab || 'activities';
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('#dashboard-view .view').forEach(v => v.classList.remove('active'));
+  document.getElementById('tab-detail').classList.add('active');
+  document.getElementById('detail-loading').style.display = 'block';
+  document.getElementById('detail-loading').innerHTML = '<div class="spinner"></div>Loading activity data…';
+  document.getElementById('detail-content').style.display = 'none';
+  document.getElementById('detail-map-card').style.display = 'none';
+  if (leafletMap) { leafletMap.remove(); leafletMap = null; }
+  Object.values(detailCharts).forEach(c => c.destroy());
+  detailCharts = {};
+
+  const summary = activities.find(a => a.id === activityId) || {};
+  document.getElementById('detail-title').textContent = summary.name || 'Activity';
+  document.getElementById('detail-subtitle').textContent = `${fmtDate(summary.start_date || '')} · ${summary.type || ''}`;
+
+  let detail, streams;
+  try {
+    [detail, streams] = await Promise.all([fetchActivityDetail(activityId), fetchStreams(activityId)]);
+  } catch(e) {
+    document.getElementById('detail-loading').innerHTML = '<p style="color:var(--muted);text-align:center;padding:40px 0;">Could not load activity data.</p>';
+    return;
+  }
+
+  document.getElementById('detail-loading').style.display = 'none';
+  document.getElementById('detail-content').style.display = 'block';
+  document.getElementById('detail-title').textContent = detail.name || summary.name || 'Activity';
+
+  // ── Route map ──
+  renderActivityMap(detail);
+
+  // ── Stats grid ──
+  const avgPaceSecs = detail.distance > 0 ? detail.moving_time / (detail.distance / 1609.344) : 0;
+  const avgPM = Math.floor(avgPaceSecs / 60), avgPS = Math.round(avgPaceSecs % 60);
+  const bestPace = detail.best_efforts?.find(e => e.name === '1 mile');
+  const fastPaceStr = bestPace ? paceStr(bestPace.distance, bestPace.moving_time) : (detail.max_speed > 0 ? (() => { const p = 1 / (detail.max_speed * 0.000621371); const m = Math.floor(p); const s = Math.round((p-m)*60); return `${m}:${s.toString().padStart(2,'0')}`; })() : '--');
+
+  const statsData = [
+    { label: 'Distance', value: metersToMi(detail.distance), unit: 'mi' },
+    { label: 'Duration', value: secsToTime(detail.moving_time), unit: '' },
+    { label: 'Avg pace', value: `${avgPM}:${avgPS.toString().padStart(2,'0')}`, unit: '/mi' },
+    { label: 'Fastest pace', value: fastPaceStr, unit: '/mi' },
+    { label: 'Calories', value: detail.calories || detail.kilojoules ? Math.round(detail.calories || detail.kilojoules * 0.239) : '--', unit: detail.calories ? 'cal' : '' },
+    { label: 'Avg heart rate', value: detail.average_heartrate ? Math.round(detail.average_heartrate) : '--', unit: detail.average_heartrate ? 'bpm' : '' },
+    { label: 'Max heart rate', value: detail.max_heartrate ? Math.round(detail.max_heartrate) : '--', unit: detail.max_heartrate ? 'bpm' : '' },
+    { label: 'Avg power', value: detail.average_watts ? Math.round(detail.average_watts) : '--', unit: detail.average_watts ? 'W' : '' },
+    { label: 'Max power', value: detail.max_watts ? Math.round(detail.max_watts) : '--', unit: detail.max_watts ? 'W' : '' },
+    { label: 'Elevation gain', value: detail.total_elevation_gain ? metersToFt(detail.total_elevation_gain).toLocaleString() : '--', unit: detail.total_elevation_gain ? 'ft' : '' },
+    { label: 'Elev high', value: detail.elev_high ? metersToFt(detail.elev_high).toLocaleString() : '--', unit: detail.elev_high ? 'ft' : '' },
+    { label: 'Elev low', value: detail.elev_low ? metersToFt(detail.elev_low).toLocaleString() : '--', unit: detail.elev_low ? 'ft' : '' },
+  ];
+  document.getElementById('detail-stats').innerHTML = statsData.map(s => `
+    <div class="stat-card">
+      <div class="stat-label">${s.label}</div>
+      <div class="stat-value" style="font-size:20px;">${s.value}<span class="stat-unit">${s.unit}</span></div>
+    </div>`).join('');
+
+  // ── HR Zones ──
+  const hrZonesEl = document.getElementById('detail-hr-zones');
+  const hrStream = streams.heartrate?.data;
+  if (hrStream && hrStream.length) {
+    const zones = calcHRZones(hrStream, detail.max_heartrate);
+    const zoneColors = ['#60a5fa','#34d399','#fbbf24','#f97316','#ef4444'];
+    const zoneNames = ['Zone 1 (recovery)','Zone 2 (aerobic)','Zone 3 (tempo)','Zone 4 (threshold)','Zone 5 (max)'];
+    hrZonesEl.innerHTML = zoneNames.map((name, i) => `
+      <div class="zone-bar-row">
+        <div class="zone-label" style="font-size:12px;">${name.split(' ')[0]} ${name.split(' ')[1]}</div>
+        <div class="zone-bar-bg"><div class="zone-bar-fill" style="width:${zones[i]}%;background:${zoneColors[i]};"></div></div>
+        <div class="zone-pct">${zones[i]}%</div>
+      </div>`).join('');
+  } else {
+    hrZonesEl.innerHTML = '<p style="color:var(--muted);font-size:13px;padding:12px 0;">No heart rate data for this activity.</p>';
+  }
+
+  // ── Mile Splits ──
+  const splitsEl = document.getElementById('detail-splits');
+  const splits = calcMileSplits(streams);
+  if (splits.length) {
+    const hasHR = splits.some(s => s.avgHR);
+    const hasElev = splits.some(s => s.elevGain !== null);
+    splitsEl.innerHTML = `<table class="splits-table">
+      <thead><tr>
+        <th>Mile</th><th>Time</th><th>Pace</th>
+        ${hasHR ? '<th>Avg HR</th>' : ''}
+        ${hasElev ? '<th>Elev +ft</th>' : ''}
+      </tr></thead>
+      <tbody>${splits.map(s => `<tr>
+        <td>${s.mile}</td><td>${s.time}</td><td>${s.pace}</td>
+        ${hasHR ? `<td>${s.avgHR ?? '--'}</td>` : ''}
+        ${hasElev ? `<td>${s.elevGain !== null ? '+' + s.elevGain : '--'}</td>` : ''}
+      </tr>`).join('')}</tbody>
+    </table>`;
+  } else {
+    splitsEl.innerHTML = '<p style="color:var(--muted);font-size:13px;padding:12px 0;">Not enough GPS data for splits.</p>';
+  }
+
+  // ── Stream charts ──
+  const distData = streams.distance?.data;
+  if (!distData) { ['detail-pace-card','detail-elev-card','detail-hr-card','detail-pwr-card'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; }); return; }
+
+  const N = 300;
+  const step = Math.ceil(distData.length / N);
+  const idx = distData.map((_, i) => i).filter(i => i % step === 0);
+  const distLabels = idx.map(i => (distData[i] / 1609.344).toFixed(2) + ' mi');
+
+  // Pace chart
+  const velData = streams.velocity_smooth?.data;
+  document.getElementById('detail-pace-card').style.display = velData ? 'block' : 'none';
+  if (velData) {
+    const paceVals = idx.map(i => velData[i] > 0 ? parseFloat((1 / (velData[i] * 0.000621371) / 60 * 60).toFixed(2)) : null).map(v => v && v < 30 ? v : null);
+    const validPace = paceVals.filter(Boolean);
+    const pMin = Math.max(0, Math.floor(Math.min(...validPace)) - 1);
+    const pMax = Math.ceil(Math.max(...validPace)) + 1;
+    const ptick = v => { const m = Math.floor(v); const s = Math.round((v-m)*60); return `${m}:${s.toString().padStart(2,'0')}`; };
+    makeDetailChart('dc-pace','dc-pace-y','dc-pace-wrap', distLabels,
+      { data: paceVals, borderColor:'#FC4C02', backgroundColor:'rgba(252,76,2,0.08)', fill:true, tension:0.3, pointRadius:0, spanGaps:true, tooltipFn: ptick },
+      { reverse:true, min:pMin, max:pMax, ticks:{ callback: ptick } });
+  }
+
+  // Elevation chart
+  const altData = streams.altitude?.data;
+  document.getElementById('detail-elev-card').style.display = altData ? 'block' : 'none';
+  if (altData) {
+    const elevVals = idx.map(i => parseFloat((altData[i] * 3.28084).toFixed(1)));
+    const eMin = Math.floor(Math.min(...elevVals)) - 10;
+    const eMax = Math.ceil(Math.max(...elevVals)) + 10;
+    makeDetailChart('dc-elev','dc-elev-y','dc-elev-wrap', distLabels,
+      { data: elevVals, borderColor:'#10b981', backgroundColor:'rgba(16,185,129,0.12)', fill:true, tension:0.3, pointRadius:0, tooltipFn: v => `${v} ft` },
+      { min: eMin, max: eMax });
+  }
+
+  // HR chart
+  document.getElementById('detail-hr-card').style.display = hrStream ? 'block' : 'none';
+  if (hrStream) {
+    const hrVals = idx.map(i => hrStream[i] || null);
+    const hrMin = Math.floor(Math.min(...hrVals.filter(Boolean))) - 5;
+    const hrMax = Math.ceil(Math.max(...hrVals.filter(Boolean))) + 5;
+    makeDetailChart('dc-hr','dc-hr-y','dc-hr-wrap', distLabels,
+      { data: hrVals, borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,0.1)', fill:true, tension:0.3, pointRadius:0, spanGaps:true, tooltipFn: v => `${Math.round(v)} bpm` },
+      { min: hrMin, max: hrMax });
+  }
+
+  // Power chart
+  const pwrData = streams.watts?.data;
+  document.getElementById('detail-pwr-card').style.display = pwrData ? 'block' : 'none';
+  if (pwrData) {
+    const pwrVals = idx.map(i => pwrData[i] || null);
+    const pwrMin = 0;
+    const pwrMax = Math.ceil(Math.max(...pwrVals.filter(Boolean)) * 1.1);
+    makeDetailChart('dc-pwr','dc-pwr-y','dc-pwr-wrap', distLabels,
+      { data: pwrVals, borderColor:'#8b5cf6', backgroundColor:'rgba(139,92,246,0.1)', fill:true, tension:0.3, pointRadius:0, spanGaps:true, tooltipFn: v => `${Math.round(v)} W` },
+      { min: pwrMin, max: pwrMax });
+  }
+}
+
+document.getElementById('btn-back').addEventListener('click', () => {
+  Object.values(detailCharts).forEach(c => c.destroy());
+  detailCharts = {};
+  if (leafletMap) { leafletMap.remove(); leafletMap = null; }
+  document.getElementById('detail-content').style.display = 'none';
+  document.getElementById('detail-map-card').style.display = 'none';
+  document.getElementById('detail-loading').style.display = 'block';
+  document.getElementById('detail-loading').innerHTML = '<div class="spinner"></div>Loading activity data…';
+  document.querySelectorAll('#dashboard-view .view').forEach(v => v.classList.remove('active'));
+  document.getElementById(`tab-${prevTab}`).classList.add('active');
+  document.querySelectorAll('.nav-tab').forEach(t => { if (t.dataset.tab === prevTab) t.classList.add('active'); else t.classList.remove('active'); });
+});
+
+// ── TAB NAVIGATION ────────────────────────────────────────────────
+document.querySelectorAll('.nav-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const target = tab.dataset.tab;
+    document.querySelectorAll('#dashboard-view .view').forEach(v => v.classList.remove('active'));
+    document.getElementById(`tab-${target}`).classList.add('active');
+    // Leaflet needs a size invalidation when its container becomes visible
+    if (target === 'heatmap' && routeHeatmapMap) {
+      setTimeout(() => routeHeatmapMap.invalidateSize(), 50);
+    }
+  });
+});
+
+// Filter chips
+document.querySelectorAll('.filter-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    const days = document.getElementById('period-select').value;
+    renderActivities(chip.dataset.filter, days === 'all' ? 'all' : parseInt(days));
+  });
+});
+
+document.getElementById('period-select').addEventListener('change', e => {
+  const active = document.querySelector('.filter-chip.active');
+  const filter = active ? active.dataset.filter : 'all';
+  const days = e.target.value === 'all' ? 'all' : parseInt(e.target.value);
+  renderActivities(filter, days);
+});
+
+function disconnect() {
+  ['strava_access_token','strava_refresh_token','strava_expires_at','strava_athlete','strava_activities_cache'].forEach(k => localStorage.removeItem(k));
+  location.reload();
+}
+document.getElementById('btn-disconnect').addEventListener('click', disconnect);
+
+window.addEventListener('DOMContentLoaded', async () => {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+
+  if (code) {
+    // Returned from Strava OAuth — exchange code for token
+    const clientId = load('strava_client_id');
+    const secret = load('strava_client_secret');
+    if (clientId && secret) {
+      document.getElementById('btn-auth').disabled = true;
+      document.getElementById('btn-auth').textContent = 'Connecting…';
+      try {
+        const res = await fetch('https://www.strava.com/oauth/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ client_id: clientId, client_secret: secret, code, grant_type: 'authorization_code' })
+        });
+        const data = await res.json();
+        if (data.access_token) {
+          save('strava_access_token', data.access_token);
+          save('strava_refresh_token', data.refresh_token);
+          save('strava_expires_at', data.expires_at);
+          if (data.athlete) save('strava_athlete', JSON.stringify(data.athlete));
+          accessToken = data.access_token;
+          // Clean URL then launch
+          window.history.replaceState({}, document.title, window.location.pathname);
+          launchDashboard();
+        } else {
+          showError(data.message || 'Token exchange failed. Check your credentials.');
+          document.getElementById('btn-auth').disabled = false;
+          document.getElementById('btn-auth').textContent = 'Connect with Strava →';
+        }
+      } catch(e) {
+        showError('Network error during token exchange.');
+        document.getElementById('btn-auth').disabled = false;
+        document.getElementById('btn-auth').textContent = 'Connect with Strava →';
+      }
+    }
+    return;
+  }
+
+  // Already have a token — auto login
+  const token = load('strava_access_token');
+  if (token) {
+    accessToken = token;
+    launchDashboard();
+  }
+});
+</script>
+</body>
+</html>
