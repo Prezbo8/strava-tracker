@@ -559,7 +559,7 @@ function renderOverview() {
   });
 
   // ── Fill every week May 2025 → today ──
-  const rangeStart = new Date('2025-04-28'); // Monday of week containing May 1 2025
+  const rangeStart = new Date('2025-05-28'); // Monday of week containing May 1 2025
   const today = new Date();
   const todayDay = today.getDay();
   const thisMonday = new Date(today);
@@ -622,7 +622,7 @@ function renderOverview() {
   });
 
   // ── Pace chart: May 2025 → today ──
-  const may2025 = new Date('2025-05-01');
+  const may2025 = new Date('2025-05-28');
 const paceRuns = runs
   .filter(a => a.distance > 1000 && new Date(a.start_date) >= may2025)
   .sort((a,b) => new Date(a.start_date) - new Date(b.start_date));
