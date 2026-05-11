@@ -247,7 +247,7 @@
     <!-- Native form GET — navigates to Strava without JS redirect -->
     <form id="auth-form" method="get" action="https://www.strava.com/oauth/authorize" autocomplete="off">
       <input type="hidden" id="oauth-client-id" name="client_id" value="">
-      <input type="hidden" name="redirect_uri" value="https://prezbo8.github.io/strava-tracker/">
+      <input type="hidden" name="redirect_uri" value="https://prezbo8.github.io/strava-tracker">
       <input type="hidden" name="response_type" value="code">
       <input type="hidden" name="scope" value="activity:read_all">
 
@@ -484,7 +484,7 @@
 </div><!-- /dashboard-view -->
 
 <script>
-const REDIRECT_URI = 'https://prezbo8.github.io/strava-tracker/';
+const REDIRECT_URI = 'https://prezbo8.github.io/strava-tracker';
 const SCOPE = 'activity:read_all';
 
 // ── YOUR STRAVA CREDENTIALS ──────────────────────────────────────
