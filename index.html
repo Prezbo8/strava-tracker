@@ -1781,14 +1781,12 @@ function renderRouteHeatmap() {
   }
 
   const heatPoints = [];
-  const allCoords = [];
 
   runs.forEach(a => {
     try {
       const coords = decodePolylineLocal(a.map.summary_polyline);
       coords.forEach(([lat, lng]) => {
         heatPoints.push([lat, lng, 1]);
-        allCoords.push([lat, lng]);
       });
     } catch(e) {}
   });
@@ -1812,9 +1810,8 @@ function renderRouteHeatmap() {
   routeHeatmapMap = L.map('route-heatmap-map', { zoomControl: true, attributionControl: false });
   L.tileLayer(tileUrl, { maxZoom: 19, maxNativeZoom: 16 }).addTo(routeHeatmapMap);
 
-  // Auto-fit to all route bounds
-  const bounds = L.latLngBounds(allCoords);
-  routeHeatmapMap.fitBounds(bounds, { padding: [40, 40] });
+  // Always open on NYC
+  routeHeatmapMap.setView([40.7128, -74.006], 12);
 
   // Heat layer — blue (rare) → cyan → green → yellow → red (frequent)
   L.heatLayer(heatPoints, {
