@@ -915,9 +915,9 @@ function renderClusterMap() {
   const el=document.getElementById('cluster-map-container');if(!el) return;
   if(clusterMap){try{clusterMap.remove();}catch(e){}clusterMap=null;}
   const isDark=matchMedia('(prefers-color-scheme: dark)').matches;
-  const tile=isDark?'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png':'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+  const tile=isDark?'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}':'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
   clusterMap=L.map(el,{zoomControl:true,attributionControl:false});
-  L.tileLayer(tile,{maxZoom:19}).addTo(clusterMap);
+  L.tileLayer(tile,{maxZoom:19,maxNativeZoom:16}).addTo(clusterMap);
   const runs=activities.filter(a=>a.type==='Run'&&a.start_latlng&&a.start_latlng.length===2);
   if(!runs.length){clusterMap.setView([40.7128,-74.006],12);return;}
   const pts=runs.map(a=>({lat:a.start_latlng[0],lng:a.start_latlng[1],name:a.name,date:fmtDate(a.start_date),dist:metersToMi(a.distance)+' mi'}));
@@ -1806,11 +1806,11 @@ function renderRouteHeatmap() {
 
   const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
   const tileUrl = isDark
-    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-    : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+    ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'
+    : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
 
   routeHeatmapMap = L.map('route-heatmap-map', { zoomControl: true, attributionControl: false });
-  L.tileLayer(tileUrl, { maxZoom: 19 }).addTo(routeHeatmapMap);
+  L.tileLayer(tileUrl, { maxZoom: 19, maxNativeZoom: 16 }).addTo(routeHeatmapMap);
 
   // Auto-fit to all route bounds
   const bounds = L.latLngBounds(allCoords);
@@ -1894,11 +1894,11 @@ function renderActivityMap(detail, streams = {}) {
 
   const isDark  = matchMedia('(prefers-color-scheme: dark)').matches;
   const tileUrl = isDark
-    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-    : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+    ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'
+    : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
 
   leafletMap = L.map('detail-map', { zoomControl: true, attributionControl: false, scrollWheelZoom: true });
-  L.tileLayer(tileUrl, { maxZoom: 19 }).addTo(leafletMap);
+  L.tileLayer(tileUrl, { maxZoom: 19, maxNativeZoom: 16 }).addTo(leafletMap);
 
   const effortLegend = document.getElementById('detail-effort-legend');
   let allCoords;
